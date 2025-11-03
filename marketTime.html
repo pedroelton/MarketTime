@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Market Clocks — London, New York, Tokyo</title>
+  <style>
+    :root { --bg: #0b0f14; --panel:#121821; --muted:#9aa4b2; --text:#e7eef8; --accent:#50b6ff; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", sans-serif; background: var(--bg); color: var(--text); }
+    header { padding: 24px 20px; display:flex; align-items:center; justify-content:space-between; border-bottom: 1px solid #1c2532; }
+    header h1 { font-size: 20px; margin: 0; letter-spacing: .3px; }
+    .grid { display:grid; gap: 16px; padding: 20px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); max-width: 1080px; margin: 0 auto; }
+    .card { background: var(--panel); border: 1px solid #1c2532; border-radius: 14px; padding: 18px; box-shadow: 0 6px 24px rgba(0,0,0,.25); }
+    .card h2 { margin: 0 0 12px; font-size: 16px; letter-spacing: .2px; }
+    .kpi { font-variant-numeric: tabular-nums; font-size: 42px; line-height: 1.1; margin: 2px 0 10px; }
+    .meta { color: var(--muted); font-size: 13px; margin-top: 8px; }
+    .row { display:flex; align-items:center; justify-content:space-between; padding: 10px 0; border-top: 1px dashed #223047; }
+    .row:first-of-type { border-top: 0; }
+    .label { color: var(--muted); font-size: 13px; }
+    .value { font-variant-numeric: tabular-nums; font-size: 16px; }
+    .pill { font-size: 12px; padding: 4px 8px; border-radius: 999px; border:1px solid #264b72; color: #a4d6ff; background: #0f2236; }
+    footer { max-width:1080px; margin: 0 auto; color: var(--muted); padding: 6px 20px 20px; font-size: 12px; }
+    .hint { opacity: .9; }
+    @media (prefers-color-scheme: light) {
+      :root { --bg: #eef1f5; --panel: #ffffff; --text: #0a0f15; --muted:#667284; --accent:#0a6cff; }
+      .card { border-color:#e7edf5; box-shadow: 0 6px 18px rgba(2,12,32,.06); }
+      header { border-bottom-color:#e7edf5; }
+      .pill { border-color:#d5e7ff; color:#0a3d73; background:#eaf4ff; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Market Clocks — London • New York • Tokyo</h1>
+    <span id="localTz" class="pill"></span>
+  </header>
+
+  <main class="grid" id="grid"></main>
+  <footer>
+    <div class="hint">Hours shown are the standard continuous sessions for each exchange/venue. Holidays and special sessions are not reflected. Tokyo typically pauses 11:30–12:30 local time; this app shows overall open (09:00) and close (15:00).</div>
+  </footer>
+
+  <script>
+    // --- Config — keep it simple and explicit
+    const markets = [
+      {
+        city: "London",
+        exchange: "LSE (London Stock Exchange)",
+        timeZone: "Europe/London",
+        openLocal: "08:00", // 08:00–16:30 local
+        closeLocal: "16:30",
+      },
+      {
+        city: "New York",
+        exchange: "NYSE/Nasdaq",
+        timeZone: "America/New_York",
+        openLocal: "09:30", // 09:30–16:00 local
+        closeLocal: "16:00",
+      },
+      {
+        city: "Tokyo",
+        exchange: "TSE (Tokyo Stock Exchange)",
+        timeZone: "Asia/Tokyo",
+        openLocal: "09:00", // 09:00–15:00 local (lunch break 11:30–12:30)
+        closeLocal: "15:00",
+      },
+    ];
+
+    // Format helpers using Intl APIs (no external libs)
+    const fmtTime = (d, timeZone) => new Intl.DateTimeFormat([], {
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone
+    }).format(d);
+
+    const fmtDate = (d, timeZone) => new Intl.DateTimeFormat([], {
+      weekday: 'short', year: 'numeric', month: 'short', day: '2-digit', timeZone
+    }).format(d);
+
+    const userTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local';
+    document.getElementById('localTz').textContent = `Your timezone: ${userTz}`;
+
+    // Build cards
+    const grid = document.getElementById('grid');
+    markets.forEach((m, idx) => {
+      const card = document.createElement('section');
+      card.className = 'card';
+      card.innerHTML = `
+        <h2>${m.city} <span class="pill">${m.exchange}</span></h2>
+        <div class="kpi" id="now-${idx}">--:--:--</div>
+        <div class="meta" id="date-${idx}"></div>
+        <div class="row"><span class="label">Opens</span><span class="value">${m.openLocal} (${abbrTz(m.timeZone)})</span></div>
+        <div class="row"><span class="label">Closes</span><span class="value">${m.closeLocal} (${abbrTz(m.timeZone)})</span></div>
+      `;
+      grid.appendChild(card);
+    });
+
+    // Lightweight timezone abbreviation (best-effort)
+    function abbrTz(timeZone) {
+      try {
+        const d = new Date();
+        const parts = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'short' }).formatToParts(d);
+        const tzPart = parts.find(p => p.type === 'timeZoneName');
+        return tzPart ? tzPart.value : timeZone.split('/').pop();
+      } catch { return timeZone.split('/').pop(); }
+    }
+
+    function tick() {
+      const now = new Date();
+      markets.forEach((m, idx) => {
+        document.getElementById(`now-${idx}`).textContent = fmtTime(now, m.timeZone);
+        document.getElementById(`date-${idx}`).textContent = fmtDate(now, m.timeZone);
+      });
+    }
+
+    tick();
+    setInterval(tick, 1000);
+  </script>
+</body>
+</html>
